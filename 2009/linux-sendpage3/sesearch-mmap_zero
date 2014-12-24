@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+
+SESEARCH=/usr/bin/sesearch
+AWK=/usr/bin/awk
+UNIQ=/usr/bin/uniq
+
+if [ -x $SESEARCH ]; then
+	$SESEARCH -p mmap_zero --allow \
+			| $AWK '{ printf "%s\n", $2 }' | grep '_t' | sort | $UNIQ \
+			> mmap_zero.txt
+
+	$SESEARCH -s unconfined_t -c process -p transition --allow \
+			| $AWK '{ printf "%s\n", $3 }' | grep '_t' | sort | $UNIQ \
+			> unconfined_t_trans.txt
+
+	$SESEARCH -s initrc_t -c process -p transition --allow \
+			| $AWK '{ printf "%s\n", $3 }' | grep '_t' | sort | $UNIQ \
+			> initrc_t_trans.txt
+
+	if [ -f unconfined_t_trans_mmap_zero.txt ]; then
+		rm -f unconfined_t_trans_mmap_zero.txt
+	fi
+
+	touch unconfined_t_trans_mmap_zero.txt
+
+	for TYPE in $(cat mmap_zero.txt); do
+		grep $TYPE unconfined_t_trans.txt >> unconfined_t_trans_mmap_zero.txt
+	done
+
+	if [ -f initrc_t_trans_mmap_zero.txt ]; then
+		rm -f initrc_t_trans_mmap_zero.txt
+	fi
+
+	touch initrc_t_trans_mmap_zero.txt
+
+	for TYPE in $(cat mmap_zero.txt); do
+		grep $TYPE initrc_t_trans.txt >> initrc_t_trans_mmap_zero.txt
+	done
+fi

